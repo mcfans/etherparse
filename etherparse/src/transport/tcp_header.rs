@@ -665,9 +665,7 @@ impl TcpHeader {
         slices: &[std::io::IoSlice],
     ) -> u16 {
         let mut sum = self.calc_checksum_post_ip_without_payload(ip_pseudo_header_sum);
-        for slice in slices {
-            sum = sum.add_slice(slice);
-        }
+        sum = sum.add_slices(slices);
         sum.ones_complement().to_be()
     }
 }
