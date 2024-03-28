@@ -452,6 +452,15 @@ impl TcpHeader {
         self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, payload)
     }
 
+    #[cfg(feature = "std")]
+    pub fn calc_checksum_ipv4_with_slices(
+        &self,
+        ip_header: &Ipv4Header,
+        slices: &[std::io::IoSlice],
+    ) -> Result<u16, ValueTooBigError<usize>> {
+        self.calc_checksum_ipv4_raw_with_slices(ip_header.source, ip_header.destination, slices)
+    }
+
     /// Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4_raw(
         &self,
@@ -481,6 +490,36 @@ impl TcpHeader {
         ))
     }
 
+    #[cfg(feature = "std")]
+    pub fn calc_checksum_ipv4_raw_with_slices(
+        &self,
+        source_ip: [u8; 4],
+        destination_ip: [u8; 4],
+        payload: &[std::io::IoSlice],
+    ) -> Result<u16, ValueTooBigError<usize>> {
+        // check that the total length fits into the tcp length field
+        let max_payload = usize::from(core::u16::MAX) - self.header_len();
+        let payload_len = payload.iter().map(|s| s.len()).sum();
+        if max_payload < payload_len {
+            return Err(ValueTooBigError {
+                actual: payload_len,
+                max_allowed: max_payload,
+                value_type: ValueType::TcpPayloadLengthIpv4,
+            });
+        }
+
+        // calculate the checksum
+        let tcp_len = self.header_len_u16() + (payload_len as u16);
+        Ok(self.calc_checksum_post_ip_with_slices(
+            checksum::Sum16BitWords::new()
+                .add_4bytes(source_ip)
+                .add_4bytes(destination_ip)
+                .add_2bytes([0, ip_number::TCP.0])
+                .add_2bytes(tcp_len.to_be_bytes()),
+            payload,
+        ))
+    }
+
     /// Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
     pub fn calc_checksum_ipv6(
         &self,
@@ -488,6 +527,15 @@ impl TcpHeader {
         payload: &[u8],
     ) -> Result<u16, ValueTooBigError<usize>> {
         self.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, payload)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn calc_checksum_ipv6_with_slices(
+        &self,
+        ip_header: &Ipv6Header,
+        slices: &[std::io::IoSlice],
+    ) -> Result<u16, ValueTooBigError<usize>> {
+        self.calc_checksum_ipv6_raw_with_slices(ip_header.source, ip_header.destination, slices)
     }
 
     /// Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
@@ -518,12 +566,38 @@ impl TcpHeader {
         ))
     }
 
-    ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
-    fn calc_checksum_post_ip(
+    pub fn calc_checksum_ipv6_raw_with_slices(
+        &self,
+        source: [u8; 16],
+        destination: [u8; 16],
+        payload: &[std::io::IoSlice],
+    ) -> Result<u16, ValueTooBigError<usize>> {
+        // check that the total length fits into the tcp length field
+        let max_payload = (core::u32::MAX as usize) - self.header_len();
+        let payload_len = payload.iter().map(|s| s.len()).sum();
+        if max_payload < payload_len {
+            return Err(ValueTooBigError {
+                actual: payload_len,
+                max_allowed: max_payload,
+                value_type: ValueType::TcpPayloadLengthIpv6,
+            });
+        }
+
+        let tcp_len = u32::from(self.header_len_u16()) + (payload_len as u32);
+        Ok(self.calc_checksum_post_ip_with_slices(
+            checksum::Sum16BitWords::new()
+                .add_16bytes(source)
+                .add_16bytes(destination)
+                .add_4bytes(tcp_len.to_be_bytes())
+                .add_2bytes([0, ip_number::TCP.0]),
+            payload,
+        ))
+    }
+
+    fn calc_checksum_post_ip_without_payload(
         &self,
         ip_pseudo_header_sum: checksum::Sum16BitWords,
-        payload: &[u8],
-    ) -> u16 {
+    ) -> checksum::Sum16BitWords {
         ip_pseudo_header_sum
             .add_2bytes(self.source_port.to_be_bytes())
             .add_2bytes(self.destination_port.to_be_bytes())
@@ -570,9 +644,31 @@ impl TcpHeader {
             .add_2bytes(self.window_size.to_be_bytes())
             .add_2bytes(self.urgent_pointer.to_be_bytes())
             .add_slice(self.options.as_slice())
+    }
+
+    ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
+    fn calc_checksum_post_ip(
+        &self,
+        ip_pseudo_header_sum: checksum::Sum16BitWords,
+        payload: &[u8],
+    ) -> u16 {
+        self.calc_checksum_post_ip_without_payload(ip_pseudo_header_sum)
             .add_slice(payload)
             .ones_complement()
             .to_be()
+    }
+
+    #[cfg(feature = "std")]
+    fn calc_checksum_post_ip_with_slices(
+        &self,
+        ip_pseudo_header_sum: checksum::Sum16BitWords,
+        slices: &[std::io::IoSlice],
+    ) -> u16 {
+        let mut sum = self.calc_checksum_post_ip_without_payload(ip_pseudo_header_sum);
+        for slice in slices {
+            sum = sum.add_slice(slice);
+        }
+        sum.ones_complement().to_be()
     }
 }
 
