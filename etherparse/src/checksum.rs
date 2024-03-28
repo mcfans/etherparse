@@ -699,7 +699,7 @@ pub mod u64_16bit_word {
 
         let mut remain = len - end_64;
 
-        if remain > 4 {
+        if remain >= 4 {
             let mut buf_4 = [0u8; 4];
             let mut remain_4 = 4;
 
@@ -826,6 +826,10 @@ pub mod u64_16bit_word {
                 add_slices(0, &[IoSlice::new(buf)]),
             );
 
+            assert_eq!(
+                add_slice(1, &[1]),
+                add_slices(1, &[IoSlice::new(&[1])]),
+            );
             assert_eq!(
                 add_slice(0, &buf[..]),
                 add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..])]),
