@@ -4,11 +4,11 @@
 pub struct Sum16BitWords {
     /// Partial sum
     #[cfg(target_pointer_width = "64")]
-    sum: u64,
+    pub sum: u64,
 
     /// Partial sum
     #[cfg(target_pointer_width = "32")]
-    sum: u32,
+    pub sum: u32,
 }
 
 impl Sum16BitWords {
@@ -38,13 +38,14 @@ impl Sum16BitWords {
         }
     }
 
-    #[inline]
-    #[cfg(target_pointer_width = "64")]
-    pub fn add_slices(self, slices: &[std::io::IoSlice]) -> Sum16BitWords {
-        Sum16BitWords {
-            sum: u64_16bit_word::add_slices(self.sum, slices),
-        }
-    }
+    // #[inline]
+    // #[cfg(target_pointer_width = "64")]
+    // pub fn add_slices(self, slices: &[std::io::IoSlice]) -> Sum16BitWords {
+    //     Sum16BitWords {
+    //         todo
+    //         // sum: u64_16bit_word::add_slices(self.sum, slices),
+    //     }
+    // }
 
     /// Add a 2 byte word.
     #[inline]
@@ -556,8 +557,6 @@ pub mod u32_16bit_word {
 /// Helper functions for calculating a 16 bit checksum using
 /// a u64 to sum up all values.
 pub mod u64_16bit_word {
-    use std::io::IoSlice;
-
 
     /// Add a 8 byte word.
     #[inline]
@@ -665,93 +664,61 @@ pub mod u64_16bit_word {
         sum
     }
 
-    #[inline]
-    pub fn add_slices(start_sum: u64, slices: &[IoSlice]) -> u64 {
-        let mut sum = start_sum;
-        let len: usize = slices.iter().map(|s| s.len()).sum();
+    // #[inline]
+    // pub fn add_slices(start_sum: u64, slices: &[IoSlice]) -> u64 {
+    //     let mut sum = start_sum;
 
-        let end_64 = len - (len % 8);
+    //     for slice in slices {
+    //         sum = add_slice(sum, &slice)
+    //     }
+    //     sum
+        // let mut last_loop_take_byte = 0;
 
-        let mut slice_idx = 0;
-        let mut in_slice_offset = 0;
+        // for slice_idx in 0..slices.len() {
+        //     let slice = slices[slice_idx];
+        //     let slice_len = slice.len() - last_loop_take_byte;
+        //     let mut remain = slice_len % 8;
+        //     let mut end_64 = slice_len - remain;
 
-        for _ in (0..end_64).step_by(8) {
-            let mut buf = [0u8; 8];
-            let mut remain = 8;
+        //     for i in (last_loop_take_byte..end_64).step_by(8) {
+        //         println!("8 byte {:?}", &slice[i..i + 8]);
+        //         sum = add_8bytes(sum, unsafe { slice[i..i + 8].try_into().unwrap_unchecked() });
+        //     }
+        //     println!("After 8 {}", sum);
 
-            while remain > 0 {
-                let slice = &slices[slice_idx];
-                let copy_len = core::cmp::min(slice.len() - in_slice_offset, remain);
+        //     last_loop_take_byte = 0;
 
-                buf[8 - remain..8 - remain + copy_len].copy_from_slice(&slice[in_slice_offset..in_slice_offset + copy_len]);
+        //     // Process 4 byte
+        //     if remain >= 4 {
+        //         println!("4 byte {:?}", &slice[end_64..end_64 + 4]);
+        //         sum = add_4bytes(sum, unsafe { slice[end_64..end_64 + 4].try_into().unwrap_unchecked() });
+        //         remain -= 4;
+        //         end_64 += 4;
+        //     };
 
-                remain -= copy_len;
-                in_slice_offset += copy_len;
+        //     println!("After 4 {}", sum);
 
-                if in_slice_offset == slice.len() {
-                    slice_idx += 1;
-                    in_slice_offset = 0;
-                }
-            }
+        //     if remain >= 2 {
+        //         sum = add_2bytes(sum, unsafe { slice[end_64..end_64 + 2].try_into().unwrap_unchecked() });
+        //         remain -= 2;
+        //         end_64 += 2;
+        //     }
 
-            sum = add_8bytes(sum, buf);
-        }
+        //     println!("After 2 {}", sum);
 
-        let mut remain = len - end_64;
-
-        if remain >= 4 {
-            let mut buf_4 = [0u8; 4];
-            let mut remain_4 = 4;
-
-            while remain_4 > 0 {
-                let slice = &slices[slice_idx];
-                let copy_len = core::cmp::min(slice.len() - in_slice_offset, remain_4);
-
-                buf_4[4 - remain_4..4 - remain_4 + copy_len].copy_from_slice(&slice[in_slice_offset..in_slice_offset + copy_len]);
-
-                in_slice_offset += copy_len;
-                remain_4 -= copy_len;
-
-                if in_slice_offset == slice.len() {
-                    slice_idx += 1;
-                    in_slice_offset = 0;
-                }
-            }
-            sum = add_4bytes(sum, buf_4);
-
-            remain -= 4;
-        }
-
-        if remain >= 2 {
-            let mut buf_2 = [0u8; 2];
-            let mut remain_2 = 2;
-
-            while remain_2 > 0 {
-                let slice = &slices[slice_idx];
-                let copy_len = core::cmp::min(slice.len() - in_slice_offset, remain_2);
-
-                buf_2[2 - remain_2..2 - remain_2 + copy_len].copy_from_slice(&slice[in_slice_offset..in_slice_offset + copy_len]);
-
-                in_slice_offset += copy_len;
-                remain_2 -= copy_len;
-
-                if in_slice_offset == slice.len() {
-                    slice_idx += 1;
-                    in_slice_offset = 0;
-                }
-            }
-            sum = add_2bytes(sum, buf_2);
-
-            remain -= 2;
-        }
-
-        if remain == 1 {
-            let slice = &slices[slice_idx];
-            sum = add_2bytes(sum, [slice[in_slice_offset], 0]);
-        }
-
-        sum
-    }
+        //     if remain == 1 {
+        //         if slice_idx != slices.len() - 1 {
+        //             last_loop_take_byte = 1;
+        //             sum = add_2bytes(sum, [slice[end_64], slices[slice_idx + 1][0]]);
+        //         } else {
+        //             println!("Here");
+        //             sum = add_2bytes(sum, [slice[end_64], 0]);
+        //         }
+        //     }
+        //     println!("After 1 {}", sum);
+        // }
+        // sum
+    // }
 
     /// Converts summed up words from an u64 to an u16 with 0 being replaced by 0xffff (useful
     /// for TCP and UDP headers).
@@ -816,91 +783,95 @@ pub mod u64_16bit_word {
             );
         }
 
-        #[test]
-        fn add_slices_test() {
-            assert_eq!(0x1234, add_slices(0x1234, &[]));
-            let buf = &[0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19];
+        // #[test]
+        // fn add_slices_test() {
+        //     assert_eq!(0x1234, add_slices(0x1234, &[]));
+        //     let buf: &[u8; 9] = &[0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19];
+            
+        //     assert_eq!(
+        //         add_slice(0, &buf[..]),
+        //         add_slices(0, &[IoSlice::new(buf)]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..]),
-                add_slices(0, &[IoSlice::new(buf)]),
-            );
+        //     assert_eq!(
+        //         add_slice(1, &[1]),
+        //         add_slices(1, &[IoSlice::new(&[1])]),
+        //     );
+        //     assert_eq!(
+        //         add_slices(0, &[IoSlice::new(&buf[..])]),
+        //         add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..])]),
+        //     );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..]),
+        //         add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..])]),
+        //     );
 
-            assert_eq!(
-                add_slice(1, &[1]),
-                add_slices(1, &[IoSlice::new(&[1])]),
-            );
-            assert_eq!(
-                add_slice(0, &buf[..]),
-                add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..]),
+        //         add_slices(0, &[IoSlice::new(&buf[..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..]),
-                add_slices(0, &[IoSlice::new(&buf[..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..]),
+        //         add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..]),
-                add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..]),
+        //         add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..5]), IoSlice::new(&buf[5..])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..]),
-                add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..5]), IoSlice::new(&buf[5..])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..]),
+        //         add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..5]), IoSlice::new(&buf[5..6]), IoSlice::new(&buf[6..])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..]),
-                add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..5]), IoSlice::new(&buf[5..6]), IoSlice::new(&buf[6..])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..8]),
+        //         add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..8])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..8]),
-                add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..8])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..8]),
+        //         add_slices(0, &[IoSlice::new(&buf[..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..6]), IoSlice::new(&buf[6..8])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..8]),
-                add_slices(0, &[IoSlice::new(&buf[..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..6]), IoSlice::new(&buf[6..8])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..8]),
+        //         add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..3]), IoSlice::new(&buf[3..4]), IoSlice::new(&buf[4..5]), IoSlice::new(&buf[5..6]), IoSlice::new(&buf[6..7]), IoSlice::new(&buf[7..8])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..8]),
-                add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..3]), IoSlice::new(&buf[3..4]), IoSlice::new(&buf[4..5]), IoSlice::new(&buf[5..6]), IoSlice::new(&buf[6..7]), IoSlice::new(&buf[7..8])]),
-            );
+        //     let buf = &[0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26];
+        //     assert_eq!(
+        //         add_slice(0, &buf[..]),
+        //         add_slices(0, &[IoSlice::new(&buf[..8]), IoSlice::new(&buf[8..])]),
+        //     );
 
-            let buf = &[0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26];
-            assert_eq!(
-                add_slice(0, &buf[..]),
-                add_slices(0, &[IoSlice::new(&buf[..8]), IoSlice::new(&buf[8..])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..]),
+        //         add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..8]), IoSlice::new(&buf[8..])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..]),
-                add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..8]), IoSlice::new(&buf[8..])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..15]),
+        //         add_slices(0, &[IoSlice::new(&buf[..8]), IoSlice::new(&buf[8..15])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..15]),
-                add_slices(0, &[IoSlice::new(&buf[..8]), IoSlice::new(&buf[8..15])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..15]),
+        //         add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..8]), IoSlice::new(&buf[8..15])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..15]),
-                add_slices(0, &[IoSlice::new(&buf[..4]), IoSlice::new(&buf[4..8]), IoSlice::new(&buf[8..15])]),
-            );
+        //     assert_eq!(
+        //         add_slice(0, &buf[..15]),
+        //         add_slices(0, &[IoSlice::new(&buf[..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..8]), IoSlice::new(&buf[8..15])]),
+        //     );
 
-            assert_eq!(
-                add_slice(0, &buf[..15]),
-                add_slices(0, &[IoSlice::new(&buf[..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..8]), IoSlice::new(&buf[8..15])]),
-            );
-
-            assert_eq!(
-                add_slice(0, &buf[..15]),
-                add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..8]), IoSlice::new(&buf[8..15])]),
-            );
-        }
+        //     assert_eq!(
+        //         add_slice(0, &buf[..15]),
+        //         add_slices(0, &[IoSlice::new(&buf[..1]), IoSlice::new(&buf[1..2]), IoSlice::new(&buf[2..4]), IoSlice::new(&buf[4..8]), IoSlice::new(&buf[8..15])]),
+        //     );
+        // }
 
         #[test]
         fn add_4bytes_test() {

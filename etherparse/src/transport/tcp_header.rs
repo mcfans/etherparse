@@ -664,9 +664,47 @@ impl TcpHeader {
         ip_pseudo_header_sum: checksum::Sum16BitWords,
         slices: &[std::io::IoSlice],
     ) -> u16 {
-        let mut sum = self.calc_checksum_post_ip_without_payload(ip_pseudo_header_sum);
-        sum = sum.add_slices(slices);
-        sum.ones_complement().to_be()
+        use std::println;
+
+        use crate::checksum::u64_16bit_word;
+
+        let header_checksum = self.calc_checksum_post_ip_without_payload(ip_pseudo_header_sum).sum;
+
+        let mut slice_sum = 0u64;
+        for slice in slices {
+            let len = slice.len();
+            let iter_count = (len >> 3) + 1;
+            let need_pad_byte = 8 - (len % 8);
+
+            println!("Iter count {} need pad byte {}", iter_count, need_pad_byte);
+
+            for i in 0..iter_count {
+                println!("Going in");
+                let need_pad = (iter_count - 1) == i;
+                let need_pad = need_pad as usize;
+
+                let need_pad_len_in_this_loop = need_pad * need_pad_byte;
+
+                let idx = i as usize;
+                println!("Idx {}, need pad len in this loop {}", idx, need_pad_len_in_this_loop);
+                let value = &slice[idx * 8..(idx + 1) * 8 - need_pad_len_in_this_loop];
+                // value[]
+                
+                let mut number = unsafe { u64::from_ne_bytes(value.try_into().unwrap_unchecked()) };
+                println!("Need pad byte {} {}", need_pad_byte, need_pad);
+                number = number << (need_pad * need_pad_byte * 8);
+
+                let (mut number, overflow) = slice_sum.overflowing_add(number);
+                number += overflow as u64;
+
+                slice_sum = number;
+            }
+        }
+
+        let (mut all_checksum, overflow) = header_checksum.overflowing_add(slice_sum);
+        all_checksum += overflow as u64;
+
+        u64_16bit_word::ones_complement(all_checksum).to_be()
     }
 }
 
