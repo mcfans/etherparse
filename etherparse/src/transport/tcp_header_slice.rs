@@ -717,10 +717,10 @@ mod test {
         // );
 
         let payload_8_byte = [1, 2, 3, 4, 5, 6, 7, 8];
-        // assert_eq!(
-        //     tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload_8_byte).unwrap(),
-        //     tcp.calc_checksum_ipv4_raw_with_slices([192, 168, 100, 1], [10, 0, 0, 1], &[IoSlice::new(&payload_8_byte)]).unwrap()
-        // );
+        assert_eq!(
+            tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload_8_byte).unwrap(),
+            tcp.calc_checksum_ipv4_raw_with_slices([192, 168, 100, 1], [10, 0, 0, 1], &[IoSlice::new(&payload_8_byte)]).unwrap()
+        );
 
         assert_eq!(
             tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload_8_byte[..7]).unwrap(),
