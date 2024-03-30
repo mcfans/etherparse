@@ -664,9 +664,6 @@ impl TcpHeader {
         ip_pseudo_header_sum: checksum::Sum16BitWords,
         slices: &[std::io::IoSlice],
     ) -> u16 {
-        use core::{iter, num};
-        use std::println;
-
         use crate::checksum::u64_16bit_word;
 
         let header_checksum = self.calc_checksum_post_ip_without_payload(ip_pseudo_header_sum).sum;
@@ -678,7 +675,7 @@ impl TcpHeader {
 
         for slice in slices {
             let len = slice.len();
-            let iter_count = (f64::from(len as u32) / 8.0).floor() as usize;
+            let iter_count = len >> 3;
             let remain_byte = len % 8;
             let need_pad = remain_byte != 0;
             let need_pad_byte = 8 - remain_byte;
