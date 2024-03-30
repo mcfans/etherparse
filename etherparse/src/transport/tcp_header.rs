@@ -1,4 +1,4 @@
-use core::{ptr::read, simd::num::SimdUint};
+use core::simd::num::SimdUint;
 
 use arrayvec::ArrayVec;
 
@@ -723,59 +723,13 @@ impl TcpHeader {
             for i in 0..iter_count {
                 let idx = i as usize;
                 let real_slice_start_offset = idx * 8;
-                // let real_slice_start_ptr = slice[real_slice_start_offset..].as_ptr();
-                
-                // let start_pad_offset = 8 - need_pad_byte;
-                // let bigger_than_zero = (start_pad_offset > 0) as usize;
-
-                // let offset_need_pad_0 = 0;
-                // let mut offset_need_pad_1 = 0;
-                // let mut offset_need_pad_2 = 0;
-                // let mut offset_need_pad_3 = 0;
-                // let mut offset_need_pad_4 = 0;
-                // let mut offset_need_pad_5 = 0;
-                // let mut offset_need_pad_6 = 0;
-                // let mut offset_need_pad_7 = 0;
-
-                // if start_pad_offset > 0 {
-                //     offset_need_pad_1 = (1 >= start_pad_offset) as usize;
-                //     offset_need_pad_2 = (2 >= start_pad_offset) as usize;
-                //     offset_need_pad_3 = (3 >= start_pad_offset) as usize;
-                //     offset_need_pad_4 = (4 >= start_pad_offset) as usize;
-                //     offset_need_pad_5 = (5 >= start_pad_offset) as usize;
-                //     offset_need_pad_6 = (6 >= start_pad_offset) as usize;
-                //     offset_need_pad_7 = (7 >= start_pad_offset) as usize;
-                // }
-
-                // let offset_need_pad_0 = 0;
-                // let offset_need_pad_1 = bigger_than_zero * (1 >= start_pad_offset) as usize;
-                // let offset_need_pad_2 = bigger_than_zero * (2 >= start_pad_offset) as usize;
-                // let offset_need_pad_3 = bigger_than_zero * (3 >= start_pad_offset) as usize;
-                // let offset_need_pad_4 = bigger_than_zero * (4 >= start_pad_offset) as usize;
-                // let offset_need_pad_5 = bigger_than_zero * (5 >= start_pad_offset) as usize;
-                // let offset_need_pad_6 = bigger_than_zero * (6 >= start_pad_offset) as usize;
-                // let offset_need_pad_7 = bigger_than_zero * (7 >= start_pad_offset) as usize;
-
-                // let value = unsafe { 
-                //     [
-                //         *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_0) + (empty_slice_ptr as usize) * offset_need_pad_0) as *const u8).add(0),
-                //         *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_1) + (empty_slice_ptr as usize) * offset_need_pad_1) as *const u8).add(1),
-                //         *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_2) + (empty_slice_ptr as usize) * offset_need_pad_2) as *const u8).add(2),
-                //         *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_3) + (empty_slice_ptr as usize) * offset_need_pad_3) as *const u8).add(3),
-                //         *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_4) + (empty_slice_ptr as usize) * offset_need_pad_4) as *const u8).add(4),
-                //         *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_5) + (empty_slice_ptr as usize) * offset_need_pad_5) as *const u8).add(5),
-                //         *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_6) + (empty_slice_ptr as usize) * offset_need_pad_6) as *const u8).add(6),
-                //         *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_7) + (empty_slice_ptr as usize) * offset_need_pad_7) as *const u8).add(7),
-                //     ]
-                // };
 
                 let number = u64::from_ne_bytes(slice[real_slice_start_offset..real_slice_start_offset + 8].try_into().unwrap());
 
-                // let (mut number, overflow) = slice_sum.overflowing_add(number);
-                // number += overflow as u64;
+                let (mut number, overflow) = slice_sum.overflowing_add(number);
+                number += overflow as u64;
 
-                // slice_sum = number;
-                slice_sum += number;
+                slice_sum = number;
             }
 
             if need_pad {
@@ -833,16 +787,14 @@ impl TcpHeader {
 
         let mut slice_sum = 0u64;
 
-        let empty_slice = [0u8; 8];
-        let empty_slice_ptr = empty_slice.as_ptr();
-
         let per_loop_data: usize = 4 * 64;
-
-        let mut empty = std::simd::Simd::<u64, 64>::splat(0u64);
 
         for slice in slices {
             let len = slice.len();
             let iter_count = len >> 8;
+            let remaining_len = len % 256;
+
+            let mut empty = std::simd::Simd::<u64, 64>::splat(0u64);
 
             for i in 0..iter_count {
                 let u8_arr: [u8; 4 * 64] = slice[i * per_loop_data..i * per_loop_data + per_loop_data].try_into().unwrap();
@@ -850,15 +802,80 @@ impl TcpHeader {
                 let read_8 = std::simd::Simd::<u32, 64>::from_array(u32_arr).cast::<u64>();
                 empty += read_8;
             }
-        }
+            slice_sum = empty.reduce_sum();
 
-        let slice_sum = empty.reduce_sum();
+            if remaining_len > 0 {
+                let start_point = len - remaining_len;
+                slice_sum = TcpHeader::cal_slice(slice_sum, &slice[start_point..]);
+            }
+        }
 
         let (mut all_checksum, overflow) = header_checksum.overflowing_add(slice_sum);
         all_checksum += overflow as u64;
 
         u64_16bit_word::ones_complement(all_checksum).to_be()
+    }
 
+    #[inline]
+    fn cal_slice(start_num: u64, slice: &[u8]) -> u64 {
+        let mut slice_sum = start_num;
+
+        let empty_slice = [0u8; 8];
+        let empty_slice_ptr = empty_slice.as_ptr();
+        let len = slice.len();
+        let iter_count = len >> 3;
+        let remain_byte = len % 8;
+        let need_pad = remain_byte != 0;
+        let need_pad_byte = 8 - remain_byte;
+
+        for i in 0..iter_count {
+            let idx = i as usize;
+            let real_slice_start_offset = idx * 8;
+
+            let number = u64::from_ne_bytes(slice[real_slice_start_offset..real_slice_start_offset + 8].try_into().unwrap());
+
+            let (mut number, overflow) = slice_sum.overflowing_add(number);
+            number += overflow as u64;
+
+            slice_sum = number;
+        }
+
+        if need_pad {
+            let start_pad_offset = 8 - need_pad_byte;
+
+            let offset_need_pad_0 = 0;
+            let offset_need_pad_1 = (1 >= start_pad_offset) as usize;
+            let offset_need_pad_2 = (2 >= start_pad_offset) as usize;
+            let offset_need_pad_3 = (3 >= start_pad_offset) as usize;
+            let offset_need_pad_4 = (4 >= start_pad_offset) as usize;
+            let offset_need_pad_5 = (5 >= start_pad_offset) as usize;
+            let offset_need_pad_6 = (6 >= start_pad_offset) as usize;
+            let offset_need_pad_7 = (7 >= start_pad_offset) as usize;               
+
+            let real_slice_start_offset = iter_count * 8;
+            let real_slice_start_ptr = slice[real_slice_start_offset..].as_ptr();
+
+            let value = unsafe { 
+                [
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_0) + (empty_slice_ptr as usize) * offset_need_pad_0) as *const u8).add(0),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_1) + (empty_slice_ptr as usize) * offset_need_pad_1) as *const u8).add(1),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_2) + (empty_slice_ptr as usize) * offset_need_pad_2) as *const u8).add(2),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_3) + (empty_slice_ptr as usize) * offset_need_pad_3) as *const u8).add(3),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_4) + (empty_slice_ptr as usize) * offset_need_pad_4) as *const u8).add(4),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_5) + (empty_slice_ptr as usize) * offset_need_pad_5) as *const u8).add(5),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_6) + (empty_slice_ptr as usize) * offset_need_pad_6) as *const u8).add(6),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_7) + (empty_slice_ptr as usize) * offset_need_pad_7) as *const u8).add(7),
+                ]
+            };
+
+            let number = u64::from_ne_bytes(value);
+
+            let (mut number, overflow) = slice_sum.overflowing_add(number);
+            number += overflow as u64;
+
+            slice_sum = number;
+        }
+        slice_sum
     }
 }
 
