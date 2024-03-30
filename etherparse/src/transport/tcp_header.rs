@@ -1,3 +1,5 @@
+use core::{ptr::read, simd::num::SimdUint};
+
 use arrayvec::ArrayVec;
 
 use crate::err::{ValueTooBigError, ValueType};
@@ -520,6 +522,44 @@ impl TcpHeader {
         ))
     }
 
+    #[cfg(feature = "std")]
+    pub fn calc_checksum_ipv4_raw_with_slices_simd(
+        &self,
+        source_ip: [u8; 4],
+        destination_ip: [u8; 4],
+        payload: &[std::io::IoSlice],
+    ) -> Result<u16, ValueTooBigError<usize>> {
+        // check that the total length fits into the tcp length field
+        let max_payload = usize::from(core::u16::MAX) - self.header_len();
+        let payload_len = payload.iter().map(|s| s.len()).sum();
+        if max_payload < payload_len {
+            return Err(ValueTooBigError {
+                actual: payload_len,
+                max_allowed: max_payload,
+                value_type: ValueType::TcpPayloadLengthIpv4,
+            });
+        }
+
+        // calculate the checksum
+        let tcp_len = self.header_len_u16() + (payload_len as u16);
+
+        Ok(self.calc_checksum_post_ip_with_slices_simd(
+            checksum::Sum16BitWords::new()
+                .add_4bytes(source_ip)
+                .add_4bytes(destination_ip)
+                .add_2bytes([0, ip_number::TCP.0])
+                .add_2bytes(tcp_len.to_be_bytes()),
+            payload,
+        ))
+        // Ok(self.calc_checksum_post_ip_with_slices_simd(
+        //     checksum::Sum16BitWords::new()
+        //         .add_4bytes(source_ip)
+        //         .add_4bytes(destination_ip)
+        //         .add_2bytes([0, ip_number::TCP.0])
+        //         .add_2bytes(tcp_len.to_be_bytes()),
+        //     payload,
+        // ))
+    }
     /// Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
     pub fn calc_checksum_ipv6(
         &self,
@@ -731,10 +771,11 @@ impl TcpHeader {
 
                 let number = u64::from_ne_bytes(slice[real_slice_start_offset..real_slice_start_offset + 8].try_into().unwrap());
 
-                let (mut number, overflow) = slice_sum.overflowing_add(number);
-                number += overflow as u64;
+                // let (mut number, overflow) = slice_sum.overflowing_add(number);
+                // number += overflow as u64;
 
-                slice_sum = number;
+                // slice_sum = number;
+                slice_sum += number;
             }
 
             if need_pad {
@@ -778,6 +819,46 @@ impl TcpHeader {
         all_checksum += overflow as u64;
 
         u64_16bit_word::ones_complement(all_checksum).to_be()
+    }
+
+    #[cfg(feature = "std")]
+    fn calc_checksum_post_ip_with_slices_simd(
+        &self,
+        ip_pseudo_header_sum: checksum::Sum16BitWords,
+        slices: &[std::io::IoSlice],
+    ) -> u16 {
+        use crate::checksum::u64_16bit_word;
+
+        let header_checksum = self.calc_checksum_post_ip_without_payload(ip_pseudo_header_sum).sum;
+
+        let mut slice_sum = 0u64;
+
+        let empty_slice = [0u8; 8];
+        let empty_slice_ptr = empty_slice.as_ptr();
+
+        let per_loop_data: usize = 4 * 64;
+
+        let mut empty = std::simd::Simd::<u64, 64>::splat(0u64);
+
+        for slice in slices {
+            let len = slice.len();
+            let iter_count = len >> 8;
+
+            for i in 0..iter_count {
+                let u8_arr: [u8; 4 * 64] = slice[i * per_loop_data..i * per_loop_data + per_loop_data].try_into().unwrap();
+                let u32_arr: [u32; 64] = unsafe { std::mem::transmute(u8_arr) };
+                let read_8 = std::simd::Simd::<u32, 64>::from_array(u32_arr).cast::<u64>();
+                empty += read_8;
+            }
+        }
+
+        let slice_sum = empty.reduce_sum();
+
+        let (mut all_checksum, overflow) = header_checksum.overflowing_add(slice_sum);
+        all_checksum += overflow as u64;
+
+        u64_16bit_word::ones_complement(all_checksum).to_be()
+
     }
 }
 
