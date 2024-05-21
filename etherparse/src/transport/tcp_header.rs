@@ -706,7 +706,9 @@ impl TcpHeader {
     ) -> u16 {
         use crate::checksum::u64_16bit_word;
 
-        let header_checksum = self.calc_checksum_post_ip_without_payload(ip_pseudo_header_sum).sum;
+        let header_checksum = self
+            .calc_checksum_post_ip_without_payload(ip_pseudo_header_sum)
+            .sum;
 
         let mut slice_sum = 0u64;
 
@@ -724,7 +726,11 @@ impl TcpHeader {
                 let idx = i as usize;
                 let real_slice_start_offset = idx * 8;
 
-                let number = u64::from_ne_bytes(slice[real_slice_start_offset..real_slice_start_offset + 8].try_into().unwrap());
+                let number = u64::from_ne_bytes(
+                    slice[real_slice_start_offset..real_slice_start_offset + 8]
+                        .try_into()
+                        .unwrap(),
+                );
 
                 let (mut number, overflow) = slice_sum.overflowing_add(number);
                 number += overflow as u64;
@@ -742,21 +748,45 @@ impl TcpHeader {
                 let offset_need_pad_4 = (4 >= start_pad_offset) as usize;
                 let offset_need_pad_5 = (5 >= start_pad_offset) as usize;
                 let offset_need_pad_6 = (6 >= start_pad_offset) as usize;
-                let offset_need_pad_7 = (7 >= start_pad_offset) as usize;               
+                let offset_need_pad_7 = (7 >= start_pad_offset) as usize;
 
                 let real_slice_start_offset = iter_count * 8;
                 let real_slice_start_ptr = slice[real_slice_start_offset..].as_ptr();
 
-                let value = unsafe { 
+                let value = unsafe {
                     [
-                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_0) + (empty_slice_ptr as usize) * offset_need_pad_0) as *const u8).add(0),
-                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_1) + (empty_slice_ptr as usize) * offset_need_pad_1) as *const u8).add(1),
-                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_2) + (empty_slice_ptr as usize) * offset_need_pad_2) as *const u8).add(2),
-                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_3) + (empty_slice_ptr as usize) * offset_need_pad_3) as *const u8).add(3),
-                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_4) + (empty_slice_ptr as usize) * offset_need_pad_4) as *const u8).add(4),
-                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_5) + (empty_slice_ptr as usize) * offset_need_pad_5) as *const u8).add(5),
-                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_6) + (empty_slice_ptr as usize) * offset_need_pad_6) as *const u8).add(6),
-                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_7) + (empty_slice_ptr as usize) * offset_need_pad_7) as *const u8).add(7),
+                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_0)
+                            + (empty_slice_ptr as usize) * offset_need_pad_0)
+                            as *const u8)
+                            .add(0),
+                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_1)
+                            + (empty_slice_ptr as usize) * offset_need_pad_1)
+                            as *const u8)
+                            .add(1),
+                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_2)
+                            + (empty_slice_ptr as usize) * offset_need_pad_2)
+                            as *const u8)
+                            .add(2),
+                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_3)
+                            + (empty_slice_ptr as usize) * offset_need_pad_3)
+                            as *const u8)
+                            .add(3),
+                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_4)
+                            + (empty_slice_ptr as usize) * offset_need_pad_4)
+                            as *const u8)
+                            .add(4),
+                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_5)
+                            + (empty_slice_ptr as usize) * offset_need_pad_5)
+                            as *const u8)
+                            .add(5),
+                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_6)
+                            + (empty_slice_ptr as usize) * offset_need_pad_6)
+                            as *const u8)
+                            .add(6),
+                        *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_7)
+                            + (empty_slice_ptr as usize) * offset_need_pad_7)
+                            as *const u8)
+                            .add(7),
                     ]
                 };
 
@@ -782,35 +812,95 @@ impl TcpHeader {
         slices: &[std::io::IoSlice],
     ) -> u16 {
         use crate::checksum::u64_16bit_word;
+        use core::cmp::min;
 
-        let header_checksum = self.calc_checksum_post_ip_without_payload(ip_pseudo_header_sum).sum;
+        let header_checksum = self
+            .calc_checksum_post_ip_without_payload(ip_pseudo_header_sum)
+            .sum;
 
-        let mut slice_sum = 0u64;
+        let slices_len: usize = slices.iter().map(|s| s.len()).sum();
 
         let per_loop_data: usize = 4 * 64;
 
-        for slice in slices {
-            let len = slice.len();
-            let iter_count = len >> 8;
-            let remaining_len = len % 256;
+        let loop_count = slices_len / per_loop_data;
 
-            let mut empty = std::simd::Simd::<u64, 64>::splat(0u64);
+        let remain_size_is_zero = slices_len % per_loop_data == 0;
 
-            for i in 0..iter_count {
-                let u8_arr: [u8; 4 * 64] = slice[i * per_loop_data..i * per_loop_data + per_loop_data].try_into().unwrap();
-                let u32_arr: [u32; 64] = unsafe { std::mem::transmute(u8_arr) };
-                let read_8 = std::simd::Simd::<u32, 64>::from_array(u32_arr).cast::<u64>();
-                empty += read_8;
+        let mut final_remain_size = slices_len % per_loop_data;
+
+        let mut current_slice_index = 0;
+        let mut current_slice_remaining_size = slices[current_slice_index].len();
+
+        let mut empty = std::simd::Simd::<u64, 64>::splat(0u64);
+        for _ in 0..loop_count {
+            let u8_arr: [u8; 4 * 64] = if current_slice_remaining_size >= per_loop_data {
+                let slice = &slices[current_slice_index];
+                let slice_len = slice.len();
+                let start_offset = slice_len - current_slice_remaining_size;
+                current_slice_remaining_size -= per_loop_data;
+                slice[start_offset..start_offset + per_loop_data]
+                    .try_into()
+                    .unwrap()
+            } else {
+                let mut arr = [0u8; 4 * 64];
+                let mut need_size = per_loop_data;
+                loop {
+                    let slice = &slices[current_slice_index];
+                    let slice_len = slice.len();
+                    let start_offset = slice_len - current_slice_remaining_size;
+                    let copy_size = min(need_size, current_slice_remaining_size);
+                    arr[per_loop_data - need_size..per_loop_data - need_size + copy_size]
+                        .copy_from_slice(&slice[start_offset..start_offset + copy_size]);
+                    need_size -= copy_size;
+                    current_slice_remaining_size -= copy_size;
+
+                    if current_slice_remaining_size == 0 {
+                        current_slice_index += 1;
+                        current_slice_remaining_size = slices[current_slice_index].len();
+                    }
+                    if need_size == 0 {
+                        break;
+                    }
+                }
+                arr
+            };
+
+            let u32_arr: [u32; 64] = unsafe { std::mem::transmute(u8_arr) };
+            let read_8 = std::simd::Simd::<u32, 64>::from_array(u32_arr).cast::<u64>();
+            empty += read_8;
+        }
+        let mut middle_slice_sum = empty.reduce_sum();
+
+        if !remain_size_is_zero {
+            let final_buffer_size = final_remain_size;
+            let mut buffer_for_remaining = [0u8; 4 * 64];
+
+            loop {
+                let slice = &slices[current_slice_index];
+                let slice_len = slice.len();
+                let start_offset = slice_len - current_slice_remaining_size;
+                let copy_size = min(final_remain_size, current_slice_remaining_size);
+                buffer_for_remaining[..copy_size]
+                    .copy_from_slice(&slice[start_offset..start_offset + copy_size]);
+                final_remain_size -= copy_size;
+                current_slice_remaining_size -= copy_size;
+
+                if current_slice_remaining_size == 0 {
+                    current_slice_index += 1;
+                    if current_slice_index < slices.len() {
+                        current_slice_remaining_size = slices[current_slice_index].len();
+                    }
+                }
+                if final_remain_size == 0 {
+                    break;
+                }
             }
-            slice_sum = empty.reduce_sum();
 
-            if remaining_len > 0 {
-                let start_point = len - remaining_len;
-                slice_sum = TcpHeader::cal_slice(slice_sum, &slice[start_point..]);
-            }
+            middle_slice_sum =
+                TcpHeader::cal_slice(middle_slice_sum, &buffer_for_remaining[..final_buffer_size]);
         }
 
-        let (mut all_checksum, overflow) = header_checksum.overflowing_add(slice_sum);
+        let (mut all_checksum, overflow) = header_checksum.overflowing_add(middle_slice_sum);
         all_checksum += overflow as u64;
 
         u64_16bit_word::ones_complement(all_checksum).to_be()
@@ -832,7 +922,11 @@ impl TcpHeader {
             let idx = i as usize;
             let real_slice_start_offset = idx * 8;
 
-            let number = u64::from_ne_bytes(slice[real_slice_start_offset..real_slice_start_offset + 8].try_into().unwrap());
+            let number = u64::from_ne_bytes(
+                slice[real_slice_start_offset..real_slice_start_offset + 8]
+                    .try_into()
+                    .unwrap(),
+            );
 
             let (mut number, overflow) = slice_sum.overflowing_add(number);
             number += overflow as u64;
@@ -850,21 +944,45 @@ impl TcpHeader {
             let offset_need_pad_4 = (4 >= start_pad_offset) as usize;
             let offset_need_pad_5 = (5 >= start_pad_offset) as usize;
             let offset_need_pad_6 = (6 >= start_pad_offset) as usize;
-            let offset_need_pad_7 = (7 >= start_pad_offset) as usize;               
+            let offset_need_pad_7 = (7 >= start_pad_offset) as usize;
 
             let real_slice_start_offset = iter_count * 8;
             let real_slice_start_ptr = slice[real_slice_start_offset..].as_ptr();
 
-            let value = unsafe { 
+            let value = unsafe {
                 [
-                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_0) + (empty_slice_ptr as usize) * offset_need_pad_0) as *const u8).add(0),
-                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_1) + (empty_slice_ptr as usize) * offset_need_pad_1) as *const u8).add(1),
-                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_2) + (empty_slice_ptr as usize) * offset_need_pad_2) as *const u8).add(2),
-                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_3) + (empty_slice_ptr as usize) * offset_need_pad_3) as *const u8).add(3),
-                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_4) + (empty_slice_ptr as usize) * offset_need_pad_4) as *const u8).add(4),
-                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_5) + (empty_slice_ptr as usize) * offset_need_pad_5) as *const u8).add(5),
-                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_6) + (empty_slice_ptr as usize) * offset_need_pad_6) as *const u8).add(6),
-                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_7) + (empty_slice_ptr as usize) * offset_need_pad_7) as *const u8).add(7),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_0)
+                        + (empty_slice_ptr as usize) * offset_need_pad_0)
+                        as *const u8)
+                        .add(0),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_1)
+                        + (empty_slice_ptr as usize) * offset_need_pad_1)
+                        as *const u8)
+                        .add(1),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_2)
+                        + (empty_slice_ptr as usize) * offset_need_pad_2)
+                        as *const u8)
+                        .add(2),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_3)
+                        + (empty_slice_ptr as usize) * offset_need_pad_3)
+                        as *const u8)
+                        .add(3),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_4)
+                        + (empty_slice_ptr as usize) * offset_need_pad_4)
+                        as *const u8)
+                        .add(4),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_5)
+                        + (empty_slice_ptr as usize) * offset_need_pad_5)
+                        as *const u8)
+                        .add(5),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_6)
+                        + (empty_slice_ptr as usize) * offset_need_pad_6)
+                        as *const u8)
+                        .add(6),
+                    *(((real_slice_start_ptr as usize) * (1 - offset_need_pad_7)
+                        + (empty_slice_ptr as usize) * offset_need_pad_7)
+                        as *const u8)
+                        .add(7),
                 ]
             };
 
