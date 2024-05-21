@@ -829,7 +829,11 @@ impl TcpHeader {
         let mut final_remain_size = slices_len % per_loop_data;
 
         let mut current_slice_index = 0;
-        let mut current_slice_remaining_size = slices[current_slice_index].len();
+        let mut current_slice_remaining_size = if slices.is_empty() {
+            0
+        } else {
+            slices[current_slice_index].len()
+        };
 
         let mut empty = std::simd::Simd::<u64, 64>::splat(0u64);
         for _ in 0..loop_count {
