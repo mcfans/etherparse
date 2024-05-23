@@ -819,7 +819,7 @@ impl TcpHeader {
                     need_size -= copy_size;
                     current_slice_remaining_size -= copy_size;
 
-                    if current_slice_remaining_size == 0 {
+                    if current_slice_remaining_size == 0 && current_slice_index < slices.len() - 1 {
                         current_slice_index += 1;
                         current_slice_remaining_size = slices[current_slice_index].len();
                     }
