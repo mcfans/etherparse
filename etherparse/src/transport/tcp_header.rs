@@ -454,15 +454,6 @@ impl TcpHeader {
         self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, payload)
     }
 
-    #[cfg(feature = "std")]
-    pub fn calc_checksum_ipv4_with_slices(
-        &self,
-        ip_header: &Ipv4Header,
-        slices: &[std::io::IoSlice],
-    ) -> Result<u16, ValueTooBigError<usize>> {
-        self.calc_checksum_ipv4_raw_with_slices(ip_header.source, ip_header.destination, slices)
-    }
-
     /// Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4_raw(
         &self,
@@ -483,36 +474,6 @@ impl TcpHeader {
         // calculate the checksum
         let tcp_len = self.header_len_u16() + (payload.len() as u16);
         Ok(self.calc_checksum_post_ip(
-            checksum::Sum16BitWords::new()
-                .add_4bytes(source_ip)
-                .add_4bytes(destination_ip)
-                .add_2bytes([0, ip_number::TCP.0])
-                .add_2bytes(tcp_len.to_be_bytes()),
-            payload,
-        ))
-    }
-
-    #[cfg(feature = "std")]
-    pub fn calc_checksum_ipv4_raw_with_slices(
-        &self,
-        source_ip: [u8; 4],
-        destination_ip: [u8; 4],
-        payload: &[std::io::IoSlice],
-    ) -> Result<u16, ValueTooBigError<usize>> {
-        // check that the total length fits into the tcp length field
-        let max_payload = usize::from(core::u16::MAX) - self.header_len();
-        let payload_len = payload.iter().map(|s| s.len()).sum();
-        if max_payload < payload_len {
-            return Err(ValueTooBigError {
-                actual: payload_len,
-                max_allowed: max_payload,
-                value_type: ValueType::TcpPayloadLengthIpv4,
-            });
-        }
-
-        // calculate the checksum
-        let tcp_len = self.header_len_u16() + (payload_len as u16);
-        Ok(self.calc_checksum_post_ip_with_slices(
             checksum::Sum16BitWords::new()
                 .add_4bytes(source_ip)
                 .add_4bytes(destination_ip)

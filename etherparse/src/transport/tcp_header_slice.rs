@@ -713,17 +713,6 @@ mod test {
         assert_eq!(
             tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &tcp_payload)
                 .unwrap(),
-            tcp.calc_checksum_ipv4_raw_with_slices(
-                [192, 168, 100, 1],
-                [10, 0, 0, 1],
-                &[IoSlice::new(&tcp_payload)]
-            )
-            .unwrap()
-        );
-
-        assert_eq!(
-            tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &tcp_payload)
-                .unwrap(),
             tcp.calc_checksum_ipv4_raw_with_slices_simd(
                 [192, 168, 100, 1],
                 [10, 0, 0, 1],
@@ -788,16 +777,106 @@ mod test {
             )
             .unwrap()
         );
+    }
+
+    #[test]
+    fn calc_checksum_special_data() {
+        // let data = "FwMDAkXI6HIcQ71zvBY62gucH4nPrs3ybPLTav3vxi1dn4I+7YFTRB/M14ndUOc63EVvLv7G9tnUnCxGPJpYPrFzPpN+RfqkzWO00go0LC7kxWKrmzU0hvtholueSONQWSY5KzoKkWy5XdrTzQ+GOdPmLTEt8+4xRaDMhkE+iwQUux34J8JImtHxlpToE+MiFtR8Hrwed41QeqibheutEgVXc1O01AbcZOUh2gazRSGwVTLZcGp/uRV4cRLtM0GAKqToNSfLVzoe7lKcsD3QMQtYIwe5gGJXpab1xW1QBXzDSA6w4U1ZQGGK1C8jr59aeYzhStig1ES896XJLBlboxNJ58wPQ8UHJqgDetQRwpx0lIzTPWFdx1fXohCthC4qcuG1wOOU1yK6Ko2W4ORVp0ngLMJIqG8XXMNsfFBNPVRtpIrU2gQH2HamsZY3FZTU+9QonygIEt+KzkcJi9V2pNOCPQA5pVfaVgWatcJeHZw2D5oXb3GdZRKqkLtu7tT6spStUnbwoBFqg1BjHFUAL853VgRvO6dufB+9Ru3mJ/p1+bYNfQRucT2lhD7Zr+C7y/WrP8rDHpMroFCq5pnZB3ewUDY2CGLt76o0YlvP9hfDNbgCHarmRFRtDXXqKLFg3qnwd62UVfo6OlCAVUv8quBG+ut0HSljvMTYT9Pio063DgQtsJ6Ou3UWpprFvJUCKUYOwMkEIjFynsKv/Oes+jnSk9vkk7T1a7RyhTeXdTH7AwUfY8mCwYqEwkduZvHO8S0A0LFx4+IV1RcDAwA5bUIe7ju49tnYf+rkRNgues+sBy722EL9VOIhN5vksmTrVyLH8+y6bFXdbZ8OkXS1RCkJriuRxVufFwMDABpYNvrwhEYplXGxr0UTUiozqT0L+K9GlxDlUA==";
+        // let tcp_payload = base64::decode(data).unwrap();
+        let mut tcp = TcpHeader::new(443, 59046, 238959574, 32768);
+        tcp.ack = true;
+        tcp.acknowledgment_number = 341241958;
+
+        tcp.set_options(&[WindowScale(5)]).unwrap();
+
+        let source_ip = [10, 2, 0, 7];
+        let dest_ip = [10, 0, 0, 1];
+
+        let payload1: [u8; 648] = [
+            23, 3, 3, 2, 69, 199, 123, 64, 70, 85, 4, 69, 192, 34, 137, 87, 197, 112, 87, 46, 254,
+            98, 112, 63, 181, 130, 183, 199, 82, 172, 215, 71, 43, 158, 73, 199, 30, 56, 201, 47,
+            184, 18, 158, 2, 95, 198, 85, 202, 150, 48, 189, 158, 165, 208, 78, 74, 186, 37, 8, 6,
+            152, 126, 23, 247, 233, 127, 66, 69, 92, 187, 139, 149, 127, 198, 155, 81, 124, 216,
+            243, 92, 134, 67, 192, 82, 157, 246, 100, 202, 108, 206, 201, 192, 69, 34, 100, 105,
+            170, 127, 99, 42, 205, 38, 191, 77, 55, 253, 30, 15, 143, 238, 248, 200, 18, 40, 249,
+            27, 8, 204, 152, 74, 72, 249, 171, 175, 161, 211, 232, 154, 187, 41, 78, 85, 75, 138,
+            84, 32, 161, 19, 59, 12, 148, 101, 198, 193, 217, 23, 82, 45, 163, 60, 16, 218, 150,
+            187, 212, 202, 148, 210, 143, 183, 237, 235, 51, 29, 161, 150, 100, 81, 141, 25, 193,
+            94, 248, 254, 92, 35, 34, 191, 153, 44, 37, 17, 240, 73, 130, 128, 137, 198, 188, 216,
+            200, 152, 99, 142, 186, 0, 195, 41, 14, 239, 227, 123, 182, 35, 181, 25, 156, 63, 80,
+            169, 168, 64, 97, 26, 98, 80, 69, 115, 192, 123, 241, 16, 185, 216, 237, 99, 217, 179,
+            206, 74, 110, 88, 212, 25, 218, 16, 143, 179, 1, 91, 94, 198, 253, 106, 196, 232, 182,
+            154, 2, 173, 91, 193, 135, 193, 78, 143, 26, 121, 159, 132, 204, 205, 72, 235, 54, 183,
+            115, 56, 34, 132, 248, 247, 183, 117, 222, 2, 252, 9, 8, 194, 188, 155, 174, 171, 185,
+            142, 7, 113, 100, 2, 207, 160, 66, 118, 108, 104, 28, 83, 199, 191, 120, 87, 125, 37,
+            94, 183, 112, 213, 92, 181, 144, 111, 235, 177, 102, 238, 225, 40, 169, 17, 178, 45,
+            157, 204, 175, 67, 116, 116, 16, 183, 113, 173, 180, 119, 110, 55, 71, 75, 33, 203,
+            219, 21, 180, 43, 69, 94, 125, 199, 187, 132, 231, 10, 173, 250, 144, 158, 1, 86, 11,
+            170, 144, 171, 217, 11, 48, 22, 20, 6, 164, 66, 180, 148, 79, 178, 63, 127, 229, 78,
+            251, 126, 237, 72, 52, 108, 220, 151, 138, 84, 86, 192, 157, 74, 50, 76, 155, 33, 202,
+            241, 174, 54, 177, 82, 183, 24, 192, 230, 131, 91, 110, 201, 69, 121, 118, 213, 37,
+            160, 51, 11, 25, 203, 95, 189, 133, 65, 69, 77, 248, 229, 124, 167, 33, 0, 250, 243,
+            104, 12, 161, 30, 58, 41, 136, 241, 247, 40, 105, 34, 95, 73, 0, 160, 201, 57, 51, 223,
+            250, 87, 27, 159, 65, 225, 212, 29, 3, 55, 86, 80, 240, 184, 254, 234, 184, 120, 153,
+            126, 219, 159, 34, 172, 171, 12, 19, 121, 242, 78, 121, 145, 18, 41, 25, 83, 62, 22,
+            136, 51, 4, 47, 102, 36, 132, 246, 98, 255, 161, 132, 94, 48, 246, 4, 8, 176, 80, 94,
+            201, 191, 169, 166, 247, 255, 156, 111, 238, 97, 85, 131, 86, 165, 26, 79, 169, 11,
+            237, 117, 52, 156, 123, 48, 94, 246, 255, 249, 251, 170, 7, 99, 91, 123, 86, 158, 39,
+            193, 212, 239, 15, 53, 170, 201, 187, 20, 142, 207, 192, 217, 46, 198, 125, 66, 26, 58,
+            240, 45, 176, 0, 237, 214, 123, 221, 89, 91, 250, 67, 83, 233, 222, 188, 188, 198, 23,
+            3, 3, 0, 57, 207, 52, 186, 44, 101, 222, 140, 136, 117, 65, 15, 104, 28, 201, 125, 179,
+            4, 229, 117, 13, 36, 30, 188, 145, 111, 198, 171, 23, 251, 246, 185, 4, 99, 185, 21,
+            161, 90, 204, 46, 91, 136, 206, 26, 2, 2, 219, 131, 121, 234, 83, 139, 178, 241, 88,
+            135, 121, 23,
+        ];
+        let payload2: [u8; 31] = [
+            23, 3, 3, 0, 26, 241, 238, 44, 80, 223, 245, 91, 163, 242, 188, 99, 181, 237, 194, 124,
+            233, 128, 27, 96, 71, 14, 182, 103, 201, 225, 146,
+        ];
+
+        let mut final_payload = payload1.to_vec();
+        final_payload.extend_from_slice(&payload2);
+
+        // assert_eq!(
+        //     tcp.calc_checksum_ipv4_raw(source_ip, dest_ip, &final_payload)
+        //         .unwrap(),
+        //     0x992
+        // );
+
+        // assert_eq!(
+        //     tcp.calc_checksum_ipv4_raw(source_ip, dest_ip, &final_payload)
+        //         .unwrap(),
+        //     tcp.calc_checksum_ipv4_raw_with_slices(
+        //         source_ip,
+        //         dest_ip,
+        //         &[IoSlice::new(&final_payload)]
+        //     )
+        //     .unwrap()
+        // );
+
         assert_eq!(
-            tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload_8_byte[..7])
+            tcp.calc_checksum_ipv4_raw(source_ip, dest_ip, &final_payload)
                 .unwrap(),
-            tcp.calc_checksum_ipv4_raw_with_slices(
-                [192, 168, 100, 1],
-                [10, 0, 0, 1],
-                &[IoSlice::new(&payload_8_byte[..7])]
+            tcp.calc_checksum_ipv4_raw_with_slices_simd(
+                source_ip,
+                dest_ip,
+                &[
+                    IoSlice::new(&final_payload[..123]),
+                    IoSlice::new(&final_payload[123..]),
+                ]
             )
             .unwrap()
         );
+
+        // assert_eq!(
+        //     tcp.calc_checksum_ipv4_raw_with_slices(
+        //         source_ip,
+        //         dest_ip,
+        //         &[IoSlice::new(&payload1), IoSlice::new(&payload2),]
+        //     )
+        //     .unwrap(),
+        //     0x992
+        // );
     }
 
     #[test]
