@@ -839,25 +839,28 @@ impl TcpHeader {
         if !remain_size_is_zero {
             let final_buffer_size = final_remain_size;
             let mut buffer_for_remaining = [0u8; 4 * 64];
+            let mut buffer_start = 0;
 
             loop {
                 let slice = &slices[current_slice_index];
                 let slice_len = slice.len();
                 let start_offset = slice_len - current_slice_remaining_size;
                 let copy_size = min(final_remain_size, current_slice_remaining_size);
-                buffer_for_remaining[..copy_size]
+                buffer_for_remaining[buffer_start..buffer_start + copy_size]
                     .copy_from_slice(&slice[start_offset..start_offset + copy_size]);
+                buffer_start += copy_size;
                 final_remain_size -= copy_size;
                 current_slice_remaining_size -= copy_size;
+
+                if final_remain_size == 0 {
+                    break;
+                }
 
                 if current_slice_remaining_size == 0 {
                     current_slice_index += 1;
                     if current_slice_index < slices.len() {
                         current_slice_remaining_size = slices[current_slice_index].len();
                     }
-                }
-                if final_remain_size == 0 {
-                    break;
                 }
             }
 
