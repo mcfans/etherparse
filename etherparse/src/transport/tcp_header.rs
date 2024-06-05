@@ -512,14 +512,6 @@ impl TcpHeader {
                 .add_2bytes(tcp_len.to_be_bytes()),
             payload,
         ))
-        // Ok(self.calc_checksum_post_ip_with_slices_simd(
-        //     checksum::Sum16BitWords::new()
-        //         .add_4bytes(source_ip)
-        //         .add_4bytes(destination_ip)
-        //         .add_2bytes([0, ip_number::TCP.0])
-        //         .add_2bytes(tcp_len.to_be_bytes()),
-        //     payload,
-        // ))
     }
     /// Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
     pub fn calc_checksum_ipv6(
@@ -779,7 +771,16 @@ impl TcpHeader {
             .calc_checksum_post_ip_without_payload(ip_pseudo_header_sum)
             .sum;
 
-        let slices_len: usize = slices.iter().map(|s| s.len()).sum();
+        let mut slices_len = 0usize;
+
+        for slice in slices {
+            slices_len += slice.len();
+            unsafe {
+                core::arch::aarch64::_prefetch(slice.as_ptr() as *const i8, 0, 1);
+            }
+        }
+
+        // let slices_len: usize = slices.iter().map(|s| s.len()).sum();
 
         let per_loop_data: usize = 4 * 64;
 
