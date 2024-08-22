@@ -282,7 +282,6 @@
 // for docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![feature(portable_simd)]
-#![feature(stdarch_aarch64_prefetch)]
 
 #[cfg(test)]
 extern crate alloc;

@@ -775,9 +775,6 @@ impl TcpHeader {
 
         for slice in slices {
             slices_len += slice.len();
-            unsafe {
-                core::arch::aarch64::_prefetch(slice.as_ptr() as *const i8, 0, 1);
-            }
         }
 
         // let slices_len: usize = slices.iter().map(|s| s.len()).sum();
