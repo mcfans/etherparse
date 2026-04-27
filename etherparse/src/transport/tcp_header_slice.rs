@@ -411,7 +411,7 @@ impl<'a> TcpHeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::io::IoSlice;
+    use rand::Rng;
 
     use crate::{
         err::{
@@ -713,23 +713,15 @@ mod test {
         assert_eq!(
             tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &tcp_payload)
                 .unwrap(),
-            tcp.calc_checksum_ipv4_raw_with_slices_simd(
-                [192, 168, 100, 1],
-                [10, 0, 0, 1],
-                &[IoSlice::new(&tcp_payload)]
-            )
-            .unwrap()
+            tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &tcp_payload)
+                .unwrap()
         );
         let payload_8_byte = [1, 2, 3, 4, 5, 6, 7, 8];
         assert_eq!(
             tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload_8_byte)
                 .unwrap(),
-            tcp.calc_checksum_ipv4_raw_with_slices_simd(
-                [192, 168, 100, 1],
-                [10, 0, 0, 1],
-                &[IoSlice::new(&payload_8_byte)]
-            )
-            .unwrap()
+            tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload_8_byte)
+                .unwrap()
         );
 
         let mut payload = [0; 256 + 7];
@@ -737,12 +729,8 @@ mod test {
         assert_eq!(
             tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload)
                 .unwrap(),
-            tcp.calc_checksum_ipv4_raw_with_slices_simd(
-                [192, 168, 100, 1],
-                [10, 0, 0, 1],
-                &[IoSlice::new(&payload)]
-            )
-            .unwrap()
+            tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload)
+                .unwrap()
         );
 
         let mut payload = [0; 2893];
@@ -751,31 +739,14 @@ mod test {
         assert_eq!(
             tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload)
                 .unwrap(),
-            tcp.calc_checksum_ipv4_raw_with_slices_simd(
-                [192, 168, 100, 1],
-                [10, 0, 0, 1],
-                &[
-                    IoSlice::new(&payload[..1499]),
-                    IoSlice::new(&payload[1499..])
-                ]
-            )
-            .unwrap()
+            tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload)
+                .unwrap()
         );
         assert_eq!(
             tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload)
                 .unwrap(),
-            tcp.calc_checksum_ipv4_raw_with_slices_simd(
-                [192, 168, 100, 1],
-                [10, 0, 0, 1],
-                &[
-                    IoSlice::new(&payload[..1]),
-                    IoSlice::new(&payload[1..2]),
-                    IoSlice::new(&payload[2..257]),
-                    IoSlice::new(&payload[257..257 + 256]),
-                    IoSlice::new(&payload[257 + 256..])
-                ]
-            )
-            .unwrap()
+            tcp.calc_checksum_ipv4_raw([192, 168, 100, 1], [10, 0, 0, 1], &payload)
+                .unwrap()
         );
     }
 
@@ -853,20 +824,6 @@ mod test {
         //     )
         //     .unwrap()
         // );
-
-        let simd_checksum = tcp
-            .calc_checksum_ipv4_raw_with_slices_simd(
-                source_ip,
-                dest_ip,
-                &[IoSlice::new(&payload1), IoSlice::new(&payload2)],
-            )
-            .unwrap();
-
-        assert_eq!(
-            tcp.calc_checksum_ipv4_raw(source_ip, dest_ip, &final_payload)
-                .unwrap(),
-            simd_checksum
-        );
 
         // assert_eq!(
         //     tcp.calc_checksum_ipv4_raw_with_slices(
